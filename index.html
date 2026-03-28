@@ -17,6 +17,23 @@ const c=document.getElementById('c'),ctx=c.getContext('2d');
 const ui=document.getElementById('ui'),ux=ui.getContext('2d');
 const W=c.width=640,H=c.height=320,GROUND=H-60;
 
+// ===== SUPABASE =====
+const SUPABASE_URL='https://ijwmfyuyudizlqdbhfvy.supabase.co';
+const SUPABASE_KEY='sb_publishable_95nEqbqeXI0Lzi8keLfFpA_qQUlSnmB';
+async function saveScore(name,score){
+  await fetch(`${SUPABASE_URL}/rest/v1/scores`,{
+    method:'POST',
+    headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`},
+    body:JSON.stringify({user_name:name,score})
+  });
+}
+async function getRanking(){
+  const res=await fetch(`${SUPABASE_URL}/rest/v1/scores?select=user_name,score&order=score.desc&limit=10`,{
+    headers:{'apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`}
+  });
+  return res.json();
+}
+
 // ===== AUDIO =====
 const AC=new AudioContext();
 function note(f,t,d,type='square',vol=0.15){
@@ -89,7 +106,18 @@ document.addEventListener('keydown',e=>{
   if(AC.state==='suspended')AC.resume();
   keys[e.code]=true;
 
-  if(state==='idle'||state==='dead'){startGame();return;}
+  if(state==='idle'||state==='dead'){
+    if(uiMode==='nameinput'){
+      // 名前入力中はEnterでスタート
+      if(e.code==='Enter'&&playerName.trim()){localStorage.setItem('giraffe_name',playerName);startGame();return;}
+      // バックスペース
+      if(e.code==='Backspace'){playerName=playerName.slice(0,-1);drawNameInput();return;}
+      // 文字入力
+      if(e.key.length===1&&playerName.length<12){playerName+=e.key;drawNameInput();return;}
+      return;
+    }
+    startGame();return;
+  }
 
   if(e.code==='ArrowUp'&&G.jumpCount<2){
     G.vy=-14;G.jumping=true;G.jumpCount++;playSEJump();
@@ -107,14 +135,92 @@ document.addEventListener('keyup',e=>{
   if(e.code==='ArrowDown')G.crouching=false;
 });
 
-// STARTボタンクリック
+// ===== ランキング・名前入力UI =====
+let playerName=localStorage.getItem('giraffe_name')||'';
+let rankingData=[];
+let uiMode='start'; // 'start'|'nameinput'|'ranking'|'result'
+
+function showNameInput(){
+  uiMode='nameinput';
+  ui.style.display='block';ui.style.pointerEvents='auto';
+  drawNameInput();
+}
+function drawNameInput(){
+  ux.clearRect(0,0,320,380);
+  const cx=160,pw=280,ph=240,px=cx-pw/2,py=70;
+  ux.fillStyle='#8B5E2A';ux.beginPath();ux.roundRect(px,py,pw,ph,16);ux.fill();
+  ux.strokeStyle='#5A3A10';ux.lineWidth=3;ux.stroke();
+  const sg=ux.createLinearGradient(px+16,py+16,px+16,py+ph-16);
+  sg.addColorStop(0,'#9AA0A8');sg.addColorStop(1,'#6A7078');
+  ux.fillStyle=sg;ux.beginPath();ux.roundRect(px+12,py+12,pw-24,ph-24,10);ux.fill();
+  ux.fillStyle='white';ux.font='bold 15px Arial Black';ux.textAlign='center';ux.textBaseline='top';
+  ux.fillText('プレイヤー名を入力',cx,py+28);
+  ux.fillStyle='rgba(255,255,255,0.2)';ux.beginPath();ux.roundRect(cx-90,py+68,180,36,8);ux.fill();
+  ux.strokeStyle='white';ux.lineWidth=2;ux.stroke();
+  ux.fillStyle='white';ux.font='bold 18px Arial Black';ux.textBaseline='middle';
+  ux.fillText(playerName||'ここに入力...',cx,py+86);
+  drawPanelButton(ux,cx,py+140,'▶  START','#2255AA',180);
+  ux.fillStyle='rgba(255,255,255,0.5)';ux.font='10px Arial';ux.textBaseline='top';
+  ux.fillText('キーボードで名前を入力してEnter',cx,py+178);
+}
+
+async function showRanking(){
+  uiMode='ranking';
+  ui.style.display='block';ui.style.pointerEvents='auto';
+  rankingData=await getRanking();
+  drawRanking();
+}
+function drawRanking(){
+  ux.clearRect(0,0,320,380);
+  const cx=160,pw=290,bh=Math.min(60+rankingData.length*28+60,340),px=cx-pw/2,py=Math.max(10,(380-bh)/2);
+  ux.fillStyle='#1a0a2e';ux.beginPath();ux.roundRect(px,py,pw,bh,16);ux.fill();
+  ux.strokeStyle='#FFD700';ux.lineWidth=3;ux.stroke();
+  ux.fillStyle='#FFD700';ux.font='bold 18px Arial Black';ux.textAlign='center';ux.textBaseline='top';
+  ux.fillText('🏆 RANKING',cx,py+16);
+  const medals=['🥇','🥈','🥉'];
+  rankingData.forEach((r,i)=>{
+    const ry=py+52+i*28;
+    ux.fillStyle=i<3?'#FFD700':'rgba(255,255,255,0.8)';
+    ux.font=`bold ${i<3?14:12}px Arial Black`;ux.textAlign='left';
+    ux.fillText(`${medals[i]||`${i+1}.`} ${r.user_name}`,px+20,ry);
+    ux.textAlign='right';
+    ux.fillText(r.score.toString().replace(/\B(?=(\d{3})+(?!\d))/g,','),px+pw-20,ry);
+  });
+  if(rankingData.length===0){
+    ux.fillStyle='rgba(255,255,255,0.6)';ux.font='12px Arial';ux.textAlign='center';
+    ux.fillText('まだスコアがありません',cx,py+70);
+  }
+  drawPanelButton(ux,cx,py+bh-40,'✕ 閉じる','#444',120);
+}
+
+// ランキングボタンクリック判定
 ui.addEventListener('click',e=>{
+  const rect=ui.getBoundingClientRect();
+  const mx=(e.clientX-rect.left)*(320/rect.width);
+  const my=(e.clientY-rect.top)*(380/rect.height);
+  if(uiMode==='ranking'){
+    // 閉じるボタン
+    const cx=160,pw=290,bh=Math.min(60+rankingData.length*28+60,340),py=Math.max(10,(380-bh)/2);
+    if(mx>cx-60&&mx<cx+60&&my>py+bh-58&&my<py+bh-22){
+      ui.style.display='none';uiMode='start';showStart();
+    }
+    return;
+  }
+  if(uiMode==='nameinput'){
+    const cx=160,py=70;
+    if(mx>cx-90&&mx<cx+90&&my>py+122&&my<py+158){
+      if(playerName.trim()){localStorage.setItem('giraffe_name',playerName);startGame();}
+    }
+    return;
+  }
   if(state==='idle'||state==='dead'){
     if(AC.state==='suspended')AC.resume();
+    // ランキングボタン判定
+    const ry=state==='idle'?232:284;
+    if(mx>100&&mx<220&&my>ry-18&&my<ry+18){showRanking();return;}
     startGame();
   }
 });
-ui.style.pointerEvents='auto';
 
 // 隠しコマンドをランダム発動
 const secrets=['hyperjump','spin','rainbow'];
@@ -147,7 +253,9 @@ function triggerSecret(){
 let secretMsg='',secretMsgTimer=0;
 function showSecretMsg(msg){secretMsg=msg;secretMsgTimer=90;}
 
+// ゲーム開始時に名前入力画面へ
 function startGame(){
+  if(!playerName.trim()){showNameInput();return;}
   state='playing';score=0;frame=0;speed=4;milestone1000=0;milestone5000Done=false;
   obstacles=[];clouds=[];particles=[];sunY=50;
   secretMode=null;secretTimer=0;spinAngle=0;secretMsg='';secretMsgTimer=0;
@@ -681,6 +789,8 @@ function loop(){
       state='dead';stopBGM();playSEDead();
       if(score>best)best=score;
       spawnParticles(G.x+G.w/2,G.y-G.h/2,'#FF4040',16);
+      // スコア保存
+      if(playerName)saveScore(playerName,score);
       setTimeout(()=>{
         ui.style.display='block';ui.style.pointerEvents='auto';
         drawResultPanel(false);
@@ -712,6 +822,7 @@ function drawFrame(){
 
 // ===== スタート画面 =====
 function showStart(){
+  uiMode='start';
   drawSky();drawGround();drawGiraffe();
   ui.style.display='block';ui.style.pointerEvents='auto';
   ux.clearRect(0,0,320,380);
@@ -735,15 +846,14 @@ function showStart(){
   ux.shadowColor='#4488FF';ux.shadowBlur=10;ux.fillText('GIRAFFE DASH!',cx,py+7);ux.shadowBlur=0;
   ux.fillStyle='#E0E8F0';ux.font='bold 12px Arial';ux.textBaseline='top';
   ux.fillText('↑ JUMP (×2)　　↓ CROUCH',cx,py+68);
-  ux.fillStyle='#FFD060';ux.font='bold 11px Arial Black';ux.fillText('🗿 BEWARE OF DAIBUTSU!',cx,py+92);
-  ux.fillStyle='#AAFFAA';ux.font='10px Arial';ux.fillText('5000pts → HYPER MODE!',cx,py+112);
+  ux.fillStyle='#FFD060';ux.font='bold 11px Arial Black';ux.fillText('BEWARE OF DAIBUTSU!',cx,py+92);
+  ux.fillStyle='#AAFFAA';ux.font='10px Arial';ux.fillText('5000pts → HYPER MODE!  [SPACE] SECRET',cx,py+112);
   // STARTボタン
-  drawPanelButton(ux,cx,py+152,'▶  START','#2255AA',140);
+  drawPanelButton(ux,cx,py+148,'▶  START','#2255AA',140);
+  // ランキングボタン
+  drawPanelButton(ux,cx,py+196,'🏆 RANKING','#886600',140);
   ux.fillStyle='rgba(255,255,255,0.4)';ux.font='10px Arial';ux.textBaseline='top';
-  ux.fillText('or Press any key',cx,py+192);
-  // 隠しコマンドヒント（小さく）
-  ux.fillStyle='rgba(255,255,100,0.5)';ux.font='9px Arial';
-  ux.fillText('💡 [SPACE] ??? secret command',cx,py+222);
+  ux.fillText('or Press any key',cx,py+236);
 }
 
 showStart();
