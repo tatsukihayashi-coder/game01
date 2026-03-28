@@ -108,14 +108,12 @@ document.addEventListener('keydown',e=>{
 
   if(state==='idle'||state==='dead'){
     if(uiMode==='nameinput'){
-      // 名前入力中はEnterでスタート
       if(e.code==='Enter'&&playerName.trim()){localStorage.setItem('giraffe_name',playerName);startGame();return;}
-      // バックスペース
       if(e.code==='Backspace'){playerName=playerName.slice(0,-1);drawNameInput();return;}
-      // 文字入力
       if(e.key.length===1&&playerName.length<12){playerName+=e.key;drawNameInput();return;}
       return;
     }
+    if(e.code==='Space')return; // スペースはゲーム中のみ
     startGame();return;
   }
 
@@ -198,14 +196,15 @@ ui.addEventListener('click',e=>{
   const rect=ui.getBoundingClientRect();
   const mx=(e.clientX-rect.left)*(320/rect.width);
   const my=(e.clientY-rect.top)*(380/rect.height);
+
   if(uiMode==='ranking'){
-    // 閉じるボタン
     const cx=160,pw=290,bh=Math.min(60+rankingData.length*28+60,340),py=Math.max(10,(380-bh)/2);
     if(mx>cx-60&&mx<cx+60&&my>py+bh-58&&my<py+bh-22){
       ui.style.display='none';uiMode='start';showStart();
     }
     return;
   }
+
   if(uiMode==='nameinput'){
     const cx=160,py=70;
     if(mx>cx-90&&mx<cx+90&&my>py+122&&my<py+158){
@@ -213,14 +212,33 @@ ui.addEventListener('click',e=>{
     }
     return;
   }
-  if(state==='idle'||state==='dead'){
-    if(AC.state==='suspended')AC.resume();
-    // ランキングボタン判定
-    const ry=state==='idle'?232:284;
-    if(mx>100&&mx<220&&my>ry-18&&my<ry+18){showRanking();return;}
-    startGame();
+
+  if(state==='idle'){
+    // STARTボタン
+    if(mx>cx2-70&&mx<cx2+70&&my>188&&my<224){startGame();return;}
+    // RANKINGボタン
+    if(mx>cx2-70&&mx<cx2+70&&my>232&&my<268){showRanking();return;}
+    startGame();return;
+  }
+
+  if(state==='dead'){
+    const cy_retry=30+218,cy_rank=30+262;
+    // RETRYボタン
+    if(mx>100&&mx<220&&my>cy_retry-18&&my<cy_retry+18){
+      if(AC.state==='suspended')AC.resume();
+      startGame();return;
+    }
+    // RANKINGボタン
+    if(mx>100&&mx<220&&my>cy_rank-18&&my<cy_rank+18){
+      showRanking();return;
+    }
+    // 名前リセットボタン
+    if(mx>cx2-50&&mx<cx2+50&&my>340&&my<360){
+      localStorage.removeItem('giraffe_name');playerName='';showNameInput();return;
+    }
   }
 });
+const cx2=160;
 
 // 隠しコマンドをランダム発動
 const secrets=['hyperjump','spin','rainbow'];
@@ -739,8 +757,12 @@ function drawResultPanel(win){
   ux.fillText(score.toString().replace(/\B(?=(\d{3})+(?!\d))/g,','),cx,py+136);ux.shadowBlur=0;
   if(score>=best&&score>0){ux.fillStyle='#FFD700';ux.font='bold 11px Arial Black';ux.fillText('★ NEW BEST! ★',cx,py+168);}
   ux.fillStyle='#C0C8D0';ux.font='12px Arial';ux.fillText('LET\'S TRY AGAIN?',cx,py+190);
-  drawPanelButton(ux,cx,py+224,'↺ RETRY','#8A2020');
-  ux.fillStyle='rgba(255,255,255,0.4)';ux.font='10px Arial';ux.fillText('or Press any key',cx,py+282);
+  drawPanelButton(ux,cx,py+218,'↺ RETRY','#8A2020');
+  drawPanelButton(ux,cx,py+262,'🏆 RANKING','#886600');
+  ux.fillStyle='rgba(255,255,255,0.4)';ux.font='10px Arial';ux.fillText('or Press any key',cx,py+300);
+  // 名前リセット
+  ux.fillStyle='rgba(255,255,255,0.3)';ux.font='9px Arial';
+  ux.fillText('［名前を変える］',cx,py+320);
 }
 
 // ===== PARTICLES =====
